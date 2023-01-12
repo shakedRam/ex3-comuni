@@ -9,6 +9,7 @@ using namespace std;
 #include <string.h>
 #include <time.h>
 #include <string>
+#include <fstream>
 
 
 struct SocketState
@@ -34,8 +35,9 @@ const int SEND = 4;
 const string PATH = "C:\\temp\\";
 const string STATUS_OK = "HTTP/1.1 200 OK";
 const string STATUS_NO_CONTENT = "HTTP/1.1 204 No Content";
-const string STATUS_ERROR = "HTTP/1.1 500 Internal Server Error";
+const string STATUS_SERVER_ERROR = "HTTP/1.1 500 Internal Server Error";
 const string STATUS_CREATED = "HTTP/1.1 201 Created";
+const string STATUS_NOT_FOUND = "HTTP/1.1 404 Not Found";
 
 bool addSocket(SOCKET id, int what);
 void removeSocket(int index);
@@ -51,12 +53,13 @@ string getFileName(string header);
 void doPost(SocketState& socketState, char* sendBuff);
 void doPut(SocketState& socketState, char* sendBuff, string& status);
 void doOptions(char* sendBuff);
-string extractFileContent(string fileName);
-void doDelete(SocketState& socketState, string& status);
-string setHeader(string body, string status,string add);
-void createNewFile(string fullPath, string body);
-void editFile(string fullPath, string body);
+string extractFileContent(string fileName, string& status);
+void doDelete(SocketState& socketState, char* sendBuff, string& status);
+string setHeader(int bodySize, string status, string add = "");
+void createNewFile(string fullPath, string body, string& status);
+void editFile(string fullPath, string body, string& status);
 string getFileNameToCreate(string header);
+bool isFileExist(string fileName);
 
 struct SocketState sockets[MAX_SOCKETS]={0};
 int socketsCount = 0;
@@ -329,7 +332,7 @@ void sendMessage(int index)
 	string reqType = getReqType(sockets[index].header);
 	string status;
 
-	if (reqType.compare("GET") == 0 || reqType.compare("HEAD"))
+	if (reqType.compare("GET") == 0 || reqType.compare("HEAD") == 0)
 		doGetOrHead(sockets[index], sendBuff, reqType);
 	else if (reqType.compare("POST") == 0)
 		doPost(sockets[index], sendBuff);
@@ -340,7 +343,7 @@ void sendMessage(int index)
 	/*else if (reqType.compare("TRACE") == 0)
 		doTrace(sockets[index]);*/
 	else if (reqType.compare("DELETE") == 0)
-		doDelete(sockets[index], status);
+		doDelete(sockets[index], sendBuff, status);
 	else
 		cout << "method not allowed" << endl;
 	
@@ -370,21 +373,30 @@ string getReqType(string header)
 
 void doGetOrHead(SocketState& socketState, char* sendBuff, string reqType)
 {
-	string lang, fileName;
-	string htmlBody, header, fullRes;
+	string lang, fileName, htmlBody, header, fullRes, status = STATUS_OK;
+
 	lang = getLang(socketState.header);
 	fileName = getFileName(socketState.header);
-	if (lang.compare("en") == 0)
-		fileName.append("En.html");
-	else if (lang.compare("he") == 0)
-		fileName.append("He.html");
-	else if (lang.compare("fr") == 0)
-		fileName.append("Fr.html");
-	
-	if (reqType.compare("GET") == 0)
-		htmlBody = extractFileContent(fileName);
 
-	header = setHeader(htmlBody, STATUS_OK);
+	if (!isFileExist(fileName + "En.html"))
+		status = STATUS_NOT_FOUND;
+	else
+	{
+		if (lang.compare("en") == 0)
+			fileName.append("En.html");
+		else if (lang.compare("he") == 0)
+			fileName.append("He.html");
+		else if (lang.compare("fr") == 0)
+			fileName.append("Fr.html");
+		else
+			status = STATUS_NOT_FOUND;
+		
+
+		if (reqType.compare("GET") == 0 && status == STATUS_OK)
+			htmlBody = extractFileContent(fileName, status);
+	}
+
+	header = setHeader(htmlBody.length(), status);
 	fullRes.append(header);
 	fullRes.append(htmlBody);
 	fullRes.append("\0");
@@ -392,9 +404,20 @@ void doGetOrHead(SocketState& socketState, char* sendBuff, string reqType)
 
 }
 
+bool isFileExist(string fileName)
+{
+	string fullPath = PATH + fileName;
+	ifstream file(fullPath);
+	if (file.good()) 
+		return true;
+	else
+		return false;
+
+}
+
 void doPut(SocketState& socketState, char* sendBuff, string& status)
 {
-	string htmlBody, header, fullRes;
+	string header, fullRes;
 	string fileName;
 	fileName = getFileNameToCreate(socketState.header);
 	struct stat buffer;
@@ -403,45 +426,87 @@ void doPut(SocketState& socketState, char* sendBuff, string& status)
 
 	if (stat(fullPath.c_str(), &buffer) == 0)
 	{
-		editFile(fullPath, socketState.body);
+		editFile(fullPath, socketState.body, status);
 		status = STATUS_OK;
 	}
 	
 	else
 	{
-		createNewFile(fullPath, socketState.body);
+		createNewFile(fullPath, socketState.body, status);
 		status = STATUS_CREATED;
 	}
 
-	htmlBody = "";
-	header = setHeader(htmlBody, status,"");
+	header = setHeader(0, status);
 	fullRes.append(header);
-	fullRes.append(htmlBody);
 	fullRes.append("\0");
 	sprintf(sendBuff, fullRes.c_str());
 }
 
-void editFile(string fullPath, string body)
+void doPost(SocketState& socketState, char* sendBuff) {
+	string fullRes;
+	cout << socketState.body;
+	sendBuff = NULL;
+
+	string header = setHeader(0, STATUS_OK);
+	fullRes.append(header);
+	fullRes.append("\0");
+	sprintf(sendBuff, fullRes.c_str());
+}
+
+void doOptions(char* sendBuff) {
+	string msg = "Allow: GET, HEAD, PUT, DELETE, TRACE, OPTIONS\r\n";
+	string header = setHeader(0, STATUS_OK, msg);
+	string fullRes;
+	fullRes.append(header);
+	fullRes.append("\0");
+	sprintf(sendBuff, fullRes.c_str());
+}
+
+void doDelete(SocketState& socketState, char* sendBuff, string& status)
+{
+	string fileName = getFileNameToCreate(socketState.header);
+
+	if (!isFileExist(fileName))
+		status = STATUS_NOT_FOUND;
+	else
+	{
+		if (remove((PATH + fileName).c_str()) == 0)
+			status = STATUS_NO_CONTENT;
+		else
+			status = STATUS_SERVER_ERROR;
+	}
+
+	string header = setHeader(0, status);
+	string fullRes;
+	fullRes.append(header);
+	fullRes.append("\0");
+	sprintf(sendBuff, fullRes.c_str());
+	
+}
+
+void editFile(string fullPath, string body, string& status)
 {
 	FILE* file;
 	file = fopen(fullPath.c_str(), "w");
 	if (file == NULL) {
 		printf("Error opening file!\n");
-		return;
+		status = STATUS_SERVER_ERROR;
 	}
-	
+
+	status = STATUS_OK;
 	fwrite(body.c_str(), sizeof(char) ,body.size(), file);
 	fclose(file);
 }
 
-void createNewFile(string fullPath, string body)
+void createNewFile(string fullPath, string body, string& status)
 {
 	FILE* file;
 	file = fopen(fullPath.c_str(), "w");
 	if (file == NULL) {
 		printf("Error creating file!\n");
-		return;
+		status = STATUS_SERVER_ERROR;
 	}
+	status = STATUS_OK;
 	fprintf(file, body.c_str());
 	fclose(file);
 }
@@ -453,7 +518,7 @@ string getFileNameToCreate(string header)
 	return header.substr(startPos + 1, endPos - startPos - 1);
 }
 
-string extractFileContent(string fileName)
+string extractFileContent(string fileName, string& status)
 {
 	FILE* fp;
 	char body[2048];
@@ -465,7 +530,7 @@ string extractFileContent(string fileName)
 	fp = fopen(fullPath.c_str(), "r");
 	if (fp == NULL) {
 		cout << "Could not open file" << endl;
-		return NULL;
+		status = STATUS_SERVER_ERROR;
 	}
 
 	/* Get the size of the file */
@@ -481,6 +546,7 @@ string extractFileContent(string fileName)
 
 	fclose(fp);
 	body[newLen] = '\0';
+	status = STATUS_OK;
 	return body;
 
 	
@@ -500,37 +566,18 @@ string getFileName(string header)
 
 }
 
-void doPost(SocketState& socketState, char* sendBuff) {
-	cout << socketState.body << endl;
-	sendBuff = NULL;
-}
-
-void doOptions(char* sendBuff) {
-	string msg = "Allow: GET, HEAD, PUT, DELETE, TRACE, OPTIONS\r\n";
-	strcpy(sendBuff, msg.c_str());
-	strcat(sendBuff, "\n");
-}
-
-string setHeader(string body, string status,string add) 
+string setHeader(int bodySize, string status, string add) 
 {
 	string header;
 	header = status + "\r\n" + add +
-		"Content-Type: text/html\r\n" +
-		"Content-Length: " + to_string(body.length()) + "\r\n" +
-		"Connection: keep-Alive" + "\r\n\r\n";
+		"Content-Length: " + to_string(bodySize) + "\r\n" +
+		"Connection: keep-Alive" + "\r\n";
+
+	if (bodySize != 0)
+		header.append("Content-Type: text/html\r\n");
+
+	header.append("\r\n");
 	return header;
 }
 
-void doDelete(SocketState& socketState, string& status)
-{
-	
-	string fileName = getFileNameToCreate(socketState.header);
-	if (remove((PATH + fileName).c_str())==0)
-	{
-		status = STATUS_OK;
-	}
-	else
-	{
-		status = STATUS_NO_CONTENT;
-	}
-}
+
