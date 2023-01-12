@@ -53,7 +53,7 @@ void doPut(SocketState& socketState, char* sendBuff, string& status);
 void doOptions(char* sendBuff);
 string extractFileContent(string fileName);
 void doDelete(SocketState& socketState, string& status);
-string setHeader(string body, string status);
+string setHeader(string body, string status,string add);
 void createNewFile(string fullPath, string body);
 void editFile(string fullPath, string body);
 string getFileNameToCreate(string header);
@@ -413,7 +413,7 @@ void doPut(SocketState& socketState, char* sendBuff, string& status)
 	}
 
 	htmlBody = "";
-	header = setHeader(htmlBody, status);
+	header = setHeader(htmlBody, status,"");
 	fullRes.append(header);
 	fullRes.append(htmlBody);
 	fullRes.append("\0");
@@ -505,15 +505,15 @@ void doPost(SocketState& socketState, char* sendBuff) {
 }
 
 void doOptions(char* sendBuff) {
-	string msg = "GET, HEAD, PUT, DELETE, TRACE, OPTIONS";
+	string msg = "Allow: GET, HEAD, PUT, DELETE, TRACE, OPTIONS\r\n";
 	strcpy(sendBuff, msg.c_str());
 	strcat(sendBuff, "\n");
 }
 
-string setHeader(string body, string status) 
+string setHeader(string body, string status,string add) 
 {
 	string header;
-	header = status + "\r\n" +
+	header = status + "\r\n" + add +
 		"Content-Type: text/html\r\n" +
 		"Content-Length: " + to_string(body.length()) + "\r\n" +
 		"Connection: keep-Alive" + "\r\n\r\n";
