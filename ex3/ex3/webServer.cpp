@@ -330,7 +330,7 @@ void sendMessage(int index)
 	string status;
 
 	if (reqType.compare("GET") == 0 || reqType.compare("HEAD"))
-		 doGetOrHead(sockets[index], sendBuff, reqType);
+		doGetOrHead(sockets[index], sendBuff, reqType);
 	else if (reqType.compare("POST") == 0)
 		doPost(sockets[index], sendBuff);
 	else if (reqType.compare("OPTIONS") == 0)
@@ -340,9 +340,10 @@ void sendMessage(int index)
 	/*else if (reqType.compare("TRACE") == 0)
 		doTrace(sockets[index]);*/
 	else if (reqType.compare("DELETE") == 0)
-		doDelete(sockets[index],status);
-	/*else if (reqType.compare("HEAD") == 0)
-		doHead(sockets[index]);*/
+		doDelete(sockets[index], status);
+	else
+		cout << "method not allowed" << endl;
+	
 	
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
 	if (SOCKET_ERROR == bytesSent)
@@ -519,7 +520,6 @@ string setHeader(string body, string status)
 		"Connection: keep-Alive" + "\r\n\r\n";
 	return header;
 }
-
 
 void doDelete(SocketState& socketState, string& status)
 {
