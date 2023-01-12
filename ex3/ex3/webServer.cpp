@@ -33,6 +33,8 @@ const int SEND = 4;
 
 const string PATH = "C:\\temp\\";
 const string STATUS_OK = "HTTP/1.1 200 OK";
+const string STATUS_NO_CONTENT = "HTTP/1.1 204 No Content";
+const string STATUS_ERROR = "HTTP/1.1 500 Internal Server Error";
 const string STATUS_CREATED = "HTTP/1.1 201 Created";
 
 bool addSocket(SOCKET id, int what);
@@ -50,6 +52,7 @@ void doPost(SocketState& socketState, char* sendBuff);
 void doPut(SocketState& socketState, char* sendBuff, string& status);
 void doOptions(char* sendBuff);
 string extractFileContent(string fileName);
+void doDelete(SocketState& socketState, string& status);
 string setHeader(string body, string status);
 void createNewFile(string fullPath, string body);
 void editFile(string fullPath, string body);
@@ -335,10 +338,10 @@ void sendMessage(int index)
 	else if (reqType.compare("PUT") == 0)
 		doPut(sockets[index], sendBuff, status);
 	/*else if (reqType.compare("TRACE") == 0)
-		doTrace(sockets[index]);
+		doTrace(sockets[index]);*/
 	else if (reqType.compare("DELETE") == 0)
-		doDelete(sockets[index]);
-	else if (reqType.compare("HEAD") == 0)
+		doDelete(sockets[index],status);
+	/*else if (reqType.compare("HEAD") == 0)
 		doHead(sockets[index]);*/
 	
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
@@ -502,7 +505,7 @@ void doPost(SocketState& socketState, char* sendBuff) {
 }
 
 void doOptions(char* sendBuff) {
-	string msg = "HTTP/1.1 200 OK/r/n Date: Mon, 27 Jul 2009 12 : 28 : 53 GMT/r/n Server : Apache / 2.2.14 (Win32)/r/Content - Length : 88/r/nContent - Type : text/html/r/n/r/n";	
+	string msg = "GET, HEAD, PUT, DELETE, TRACE, OPTIONS";
 	strcpy(sendBuff, msg.c_str());
 	strcat(sendBuff, "\n");
 }
@@ -517,3 +520,17 @@ string setHeader(string body, string status)
 	return header;
 }
 
+
+void doDelete(SocketState& socketState, string& status)
+{
+	
+	string fileName = getFileNameToCreate(socketState.header);
+	if (remove((PATH + fileName).c_str())==0)
+	{
+		status = STATUS_OK;
+	}
+	else
+	{
+		status = STATUS_NO_CONTENT;
+	}
+}
