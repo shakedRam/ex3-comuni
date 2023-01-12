@@ -1,6 +1,8 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <iostream>
+#include <sys/stat.h>
+#include <stdio.h>
 using namespace std;
 #pragma comment(lib, "Ws2_32.lib")
 #include <winsock2.h>
@@ -28,9 +30,12 @@ const int LISTEN  = 1;
 const int RECEIVE = 2;
 const int IDLE = 3;
 const int SEND = 4;
+
+const string PATH = "C:\\temp\\";
 const string STATUS_OK = "HTTP/1.1 200 OK";
 const string STATUS_NO_CONTENT = "HTTP/1.1 204 No Content";
 const string STATUS_ERROR = "HTTP/1.1 500 Internal Server Error";
+const string STATUS_CREATED = "HTTP/1.1 201 Created";
 
 bool addSocket(SOCKET id, int what);
 void removeSocket(int index);
@@ -44,11 +49,14 @@ void doGet(SocketState& socketState, char* sendBuff);
 string getLang(string header);
 string getFileName(string header);
 void doPost(SocketState& socketState, char* sendBuff);
-void doPut(SocketState& socketState, char* sendBuff);
+void doPut(SocketState& socketState, char* sendBuff, string& status);
 void doOptions(char* sendBuff);
 string extractFileContent(string fileName);
 void doDelete(SocketState& socketState, string& status);
 string setHeader(string body, string status);
+void createNewFile(string fullPath, string body);
+void editFile(string fullPath, string body);
+string getFileNameToCreate(string header);
 
 struct SocketState sockets[MAX_SOCKETS]={0};
 int socketsCount = 0;
@@ -319,6 +327,7 @@ void sendMessage(int index)
 	char sendBuff[5000];
 	SOCKET msgSocket = sockets[index].id;
 	string reqType = getReqType(sockets[index].header);
+	string status;
 
 	if (reqType.compare("GET") == 0)
 		 doGet(sockets[index], sendBuff);
@@ -327,7 +336,7 @@ void sendMessage(int index)
 	else if (reqType.compare("OPTIONS") == 0)
 		doOptions(sendBuff);
 	else if (reqType.compare("PUT") == 0)
-		doPut(sockets[index], sendBuff);
+		doPut(sockets[index], sendBuff, status);
 	/*else if (reqType.compare("TRACE") == 0)
 		doTrace(sockets[index]);
 	else if (reqType.compare("DELETE") == 0)
@@ -350,8 +359,7 @@ void processReq(SocketState& socketState)
 	string buffer(socketState.buffer);
 	int posSplit = buffer.find("\r\n\r\n") + 4;
 	socketState.header = buffer.substr(0, posSplit);
-	socketState.body = buffer.substr(posSplit);
-	
+	socketState.body = buffer.substr(posSplit);	
 }
 
 string getReqType(string header)
@@ -381,16 +389,72 @@ void doGet(SocketState& socketState, char* sendBuff)
 
 }
 
-void doPut(SocketState& socketState, char* sendBuff)
+void doPut(SocketState& socketState, char* sendBuff, string& status)
 {
+	string htmlBody, header, fullRes;
+	string fileName;
+	fileName = getFileNameToCreate(socketState.header);
+	struct stat buffer;
+	string fullPath = PATH;
+	fullPath.append(fileName);
 
+	if (stat(fullPath.c_str(), &buffer) == 0)
+	{
+		editFile(fullPath, socketState.body);
+		status = STATUS_OK;
+	}
+	
+	else
+	{
+		createNewFile(fullPath, socketState.body);
+		status = STATUS_CREATED;
+	}
+
+	htmlBody = "";
+	header = setHeader(htmlBody, status);
+	fullRes.append(header);
+	fullRes.append(htmlBody);
+	fullRes.append("\0");
+	sprintf(sendBuff, fullRes.c_str());
 }
+void editFile(string fullPath, string body)
+{
+	FILE* file;
+	file = fopen(fullPath.c_str(), "w");
+	if (file == NULL) {
+		printf("Error opening file!\n");
+		return;
+	}
+	
+	fwrite(body.c_str(), sizeof(char) ,body.size(), file);
+	fclose(file);
+}
+
+void createNewFile(string fullPath, string body)
+{
+	FILE* file;
+	file = fopen(fullPath.c_str(), "w");
+	if (file == NULL) {
+		printf("Error creating file!\n");
+		return;
+	}
+	fprintf(file, body.c_str());
+	fclose(file);
+}
+
+string getFileNameToCreate(string header)
+{
+	int startPos = header.find('/');
+	int endPos = header.find(" ", startPos + 1);
+	return header.substr(startPos + 1, endPos - startPos - 1);
+}
+
 string extractFileContent(string fileName)
 {
 	FILE* fp;
 	char body[2048];
 	long file_size;
-	string fullPath = "C:\\temp\\";
+	string fullPath = PATH;
 	fullPath.append(fileName);
 
 	
