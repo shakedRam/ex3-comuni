@@ -43,7 +43,7 @@ void sendMessage(int index);
 
 void processReq(SocketState& socketState);
 string getReqType(string header);
-void doGet(SocketState& socketState, char* sendBuff);
+void doGetOrHead(SocketState& socketState, char* sendBuff, string reqType);
 string getLang(string header);
 string getFileName(string header);
 void doPost(SocketState& socketState, char* sendBuff);
@@ -326,8 +326,8 @@ void sendMessage(int index)
 	string reqType = getReqType(sockets[index].header);
 	string status;
 
-	if (reqType.compare("GET") == 0)
-		 doGet(sockets[index], sendBuff);
+	if (reqType.compare("GET") == 0 || reqType.compare("HEAD"))
+		 doGetOrHead(sockets[index], sendBuff, reqType);
 	else if (reqType.compare("POST") == 0)
 		doPost(sockets[index], sendBuff);
 	else if (reqType.compare("OPTIONS") == 0)
@@ -364,7 +364,7 @@ string getReqType(string header)
 	return header.substr(0, header.find(' '));
 }
 
-void doGet(SocketState& socketState, char* sendBuff)
+void doGetOrHead(SocketState& socketState, char* sendBuff, string reqType)
 {
 	string lang, fileName;
 	string htmlBody, header, fullRes;
@@ -377,7 +377,9 @@ void doGet(SocketState& socketState, char* sendBuff)
 	else if (lang.compare("fr") == 0)
 		fileName.append("Fr.html");
 	
-	htmlBody = extractFileContent(fileName);
+	if (reqType.compare("GET") == 0)
+		htmlBody = extractFileContent(fileName);
+
 	header = setHeader(htmlBody, STATUS_OK);
 	fullRes.append(header);
 	fullRes.append(htmlBody);
@@ -414,6 +416,7 @@ void doPut(SocketState& socketState, char* sendBuff, string& status)
 	fullRes.append("\0");
 	sprintf(sendBuff, fullRes.c_str());
 }
+
 void editFile(string fullPath, string body)
 {
 	FILE* file;
