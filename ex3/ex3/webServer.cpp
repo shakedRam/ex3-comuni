@@ -30,8 +30,10 @@ const int LISTEN  = 1;
 const int RECEIVE = 2;
 const int IDLE = 3;
 const int SEND = 4;
+
 const string PATH = "C:\\temp\\";
 const string STATUS_OK = "HTTP/1.1 200 OK";
+const string STATUS_CREATED = "HTTP/1.1 201 Created";
 
 bool addSocket(SOCKET id, int what);
 void removeSocket(int index);
@@ -51,6 +53,7 @@ string extractFileContent(string fileName);
 string setHeader(string body, string status);
 void createNewFile(string fullPath, string body);
 void editFile(string fullPath, string body);
+string getFileNameToCreate(string header);
 
 struct SocketState sockets[MAX_SOCKETS]={0};
 int socketsCount = 0;
@@ -385,17 +388,31 @@ void doGet(SocketState& socketState, char* sendBuff)
 
 void doPut(SocketState& socketState, char* sendBuff, string& status)
 {
+	string htmlBody, header, fullRes;
 	string fileName;
 	fileName = getFileNameToCreate(socketState.header);
 	struct stat buffer;
 	string fullPath = PATH;
 	fullPath.append(fileName);
-	if (stat(fullPath.c_str(), &buffer) == 0) 
+
+	if (stat(fullPath.c_str(), &buffer) == 0)
+	{
 		editFile(fullPath, socketState.body);
-	
-	else {
-		createNewFile(fullPath, socketState.body);
+		status = STATUS_OK;
 	}
+	
+	else
+	{
+		createNewFile(fullPath, socketState.body);
+		status = STATUS_CREATED;
+	}
+
+	htmlBody = "";
+	header = setHeader(htmlBody, status);
+	fullRes.append(header);
+	fullRes.append(htmlBody);
+	fullRes.append("\0");
+	sprintf(sendBuff, fullRes.c_str());
 }
 void editFile(string fullPath, string body)
 {
@@ -409,6 +426,7 @@ void editFile(string fullPath, string body)
 	fwrite(body.c_str(), sizeof(char) ,body.size(), file);
 	fclose(file);
 }
+
 void createNewFile(string fullPath, string body)
 {
 	FILE* file;
@@ -424,7 +442,8 @@ void createNewFile(string fullPath, string body)
 string getFileNameToCreate(string header)
 {
 	int startPos = header.find('/');
-	return header.substr(startPos + 1);
+	int endPos = header.find(" ", startPos + 1);
+	return header.substr(startPos + 1, endPos - startPos - 1);
 }
 
 string extractFileContent(string fileName)
