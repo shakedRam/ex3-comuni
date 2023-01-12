@@ -29,6 +29,8 @@ const int RECEIVE = 2;
 const int IDLE = 3;
 const int SEND = 4;
 const string STATUS_OK = "HTTP/1.1 200 OK";
+const string STATUS_NO_CONTENT = "HTTP/1.1 204 No Content";
+const string STATUS_ERROR = "HTTP/1.1 500 Internal Server Error";
 
 bool addSocket(SOCKET id, int what);
 void removeSocket(int index);
@@ -45,6 +47,7 @@ void doPost(SocketState& socketState, char* sendBuff);
 void doPut(SocketState& socketState, char* sendBuff);
 void doOptions(char* sendBuff);
 string extractFileContent(string fileName);
+void doDelete(SocketState& socketState, string& status);
 string setHeader(string body, string status);
 
 struct SocketState sockets[MAX_SOCKETS]={0};
@@ -450,3 +453,18 @@ string setHeader(string body, string status)
 	return header;
 }
 
+
+void doDelete(SocketState& socketState, string& status)
+{
+	string header = socketState.header;
+	int startPos = header.find('/');
+	string fileName = header.substr(startPos + 1, header.length());
+	if (remove(fileName.c_str())==0)
+	{
+		status = STATUS_OK;
+	}
+	else
+	{
+		status = STATUS_NO_CONTENT;
+	}
+}
